@@ -16,3 +16,6 @@ etc/udev/rules.d
 home/vind-admin/rely_p2p.sh
 home/vind-admin/start_p2p_on_wlan0.sh
 usr/local/bin/bg10_producer_rgb.py
+etc/systemd/system/wifibroadcast-cluster@.service
+home/vind-admin/.ssh/wfb_cluster_ed25519
+home/vind-admin/Rtps_Server/mediamtx.yml

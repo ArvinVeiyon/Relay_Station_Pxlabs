@@ -91,3 +91,52 @@
 - **Tracked files:** System_files_list.txt
 
 ## Auto Sync Log
+
+## 13) WFB-NG Cluster Mode (Distributed Network)
+
+The relay can run in two modes — switch by starting/stopping different systemd services:
+
+### Mode A — Standalone (default)
+Single GS node, only the relay's WiFi adapter:
+```bash
+sudo systemctl stop wifibroadcast-cluster@gs.service
+sudo systemctl start wifibroadcast@gs.service
+```
+- Service: `wifibroadcast@gs.service`
+- Uses: `--wlans wlx00c0cab6db3b`
+
+### Mode B — Cluster (distributed, adds OpenWrt node)
+Two RF nodes: relay (wlx00c0cab6db3b) + OpenWrt CPE610 (10.5.7.102, phy0-mon0):
+```bash
+sudo systemctl stop wifibroadcast@gs.service
+sudo systemctl start wifibroadcast-cluster@gs.service
+```
+- Service: `wifibroadcast-cluster@gs.service`
+- Uses: `wfb-server --profiles gs --cluster ssh` (WFB_CLUSTER_MODE in env)
+- Cluster config in `/etc/wifibroadcast.cfg` → `[cluster]` section
+- Nodes: `127.0.0.1` (relay) + `10.5.7.102` (OpenWrt CPE610)
+- SSH key: `/home/vind-admin/.ssh/wfb_cluster_ed25519` (used to init OpenWrt node)
+
+### Cluster Init (first time or after OpenWrt reflash)
+```bash
+sudo wfb-server --profiles gs --gen-init 10.5.6.102 > /tmp/cpe610_node_init.sh
+scp -O -i ~/.ssh/wfb_cluster_ed25519 /tmp/cpe610_node_init.sh root@10.5.6.102:/tmp/
+ssh -i ~/.ssh/wfb_cluster_ed25519 root@10.5.6.102 'bash /tmp/cpe610_node_init.sh'
+```
+
+### OpenWrt Node (CPE610)
+- **Device:** TP-Link CPE610 v2
+- **Firmware:** openwrt-24.10.4-ath79-generic-tplink_cpe610-v2 (in ~/Openwrt_WFB_NG/)
+- **WFB-NG package:** wfb-ng_24.9.7-r2_mips_24kc.ipk (in ~/Openwrt_WFB_NG/)
+- **IP:** 10.5.7.102 (when cluster active)
+- **WFB iface:** phy0-mon0
+- **Custom init script on node:** /usr/sbin/wfb-mon0.sh
+- **SSH:** root@10.5.7.102 via wfb_cluster_ed25519 key
+
+### Cluster vs Standalone Summary
+| | Standalone | Cluster |
+|---|---|---|
+| Service | wifibroadcast@gs | wifibroadcast-cluster@gs |
+| RF nodes | 1 (relay RPi) | 2 (RPi + CPE610) |
+| Coverage | Single antenna | Distributed/wider |
+| Mode flag | --wlans | --cluster ssh |

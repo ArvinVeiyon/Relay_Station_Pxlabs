@@ -1,0 +1,26 @@
+[Unit]
+Description=WFB-ng CLUSTER server, profile %i
+Requires=wifibroadcast.service
+ReloadPropagatedFrom=wifibroadcast.service
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+# common environment
+EnvironmentFile=/etc/default/wifibroadcast
+# per-profile environment
+EnvironmentFile=-/etc/default/wifibroadcast.%i
+
+# IMPORTANT: cluster mode uses config [cluster] nodes from /etc/wifibroadcast.cfg
+# No --wlans here.
+ExecStart=/bin/bash -c "exec /usr/bin/wfb-server --profiles $(echo %i | tr : ' ') --cluster ${WFB_CLUSTER_MODE:-ssh}"
+
+KillMode=mixed
+TimeoutStopSec=5s
+Restart=on-failure
+RestartSec=5s
+StandardError=inherit
+
+[Install]
+WantedBy=wifibroadcast.service

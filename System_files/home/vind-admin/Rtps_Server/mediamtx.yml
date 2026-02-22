@@ -1,0 +1,7 @@
+rtspAddress: :8554
+
+paths:
+  live:
+    source: udp://127.0.0.1:5600
+    sourceProtocol: udp
+    sourceOnDemand: true
