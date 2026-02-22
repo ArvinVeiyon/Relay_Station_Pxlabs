@@ -19,3 +19,6 @@ usr/local/bin/bg10_producer_rgb.py
 etc/systemd/system/wifibroadcast-cluster@.service
 home/vind-admin/.ssh/wfb_cluster_ed25519
 home/vind-admin/Rtps_Server/mediamtx.yml
+etc/mavlink-router/main.conf
+etc/systemd/system/mavlink.router.service
+etc/sid.conf
