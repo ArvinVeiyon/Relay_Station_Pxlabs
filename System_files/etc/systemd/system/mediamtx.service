@@ -1,0 +1,13 @@
+[Unit]
+Description=MediaMTX Low Latency RTSP Server
+After=network.target wifibroadcast@gs.service
+
+[Service]
+WorkingDirectory=/home/vind-admin/Rtps_Server
+ExecStart=/home/vind-admin/Rtps_Server/mediamtx /home/vind-admin/Rtps_Server/mediamtx.yml
+Restart=always
+RestartSec=2
+User=vind-admin
+
+[Install]
+WantedBy=multi-user.target

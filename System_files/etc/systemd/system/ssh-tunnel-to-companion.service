@@ -1,0 +1,15 @@
+[Unit]
+Description=SSH Tunnel to Companion Computer
+After=network.target wifibroadcast@gs.service
+
+[Service]
+ExecStart=/usr/bin/autossh -M 0 -L 0.0.0.0:2222:10.5.5.87:22 roz@10.5.5.87 -N -i /home/vind-admin/.ssh/id_rsa -v
+Restart=always
+User=vind-admin
+Environment=AUTOSSH_LOGFILE=/var/log/ssh-tunnel.log
+Environment=AUTOSSH_DEBUG=1
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,12 @@
+[2026-02-22 00:31:15] sync start
+rsync: [sender] send_files failed to open "/etc/iptables/rules.v4": Permission denied (13)
+rsync: [sender] send_files failed to open "/etc/iptables/rules.v6": Permission denied (13)
+rsync: [sender] send_files failed to open "/etc/netplan/50-cloud-init.yaml": Permission denied (13)
+rsync: [sender] send_files failed to open "/etc/netplan/50-cloud-init.yaml1": Permission denied (13)
+rsync error: some files/attrs were not transferred (see previous errors) (code 23) at main.c(1338) [sender=3.2.7]
+[2026-02-22 00:32:05] sync start
+rsync: [sender] send_files failed to open "/etc/iptables/rules.v4": Permission denied (13)
+rsync: [sender] send_files failed to open "/etc/iptables/rules.v6": Permission denied (13)
+rsync: [sender] send_files failed to open "/etc/netplan/50-cloud-init.yaml": Permission denied (13)
+rsync: [sender] send_files failed to open "/etc/netplan/50-cloud-init.yaml1": Permission denied (13)
+rsync error: some files/attrs were not transferred (see previous errors) (code 23) at main.c(1338) [sender=3.2.7]
