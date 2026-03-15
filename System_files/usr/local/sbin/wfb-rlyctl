@@ -1,0 +1,135 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PROFILE="${PROFILE:-gs}"
+
+ENV_FILE="/etc/default/wifibroadcast"
+UNIT_STANDALONE="wifibroadcast@${PROFILE}.service"
+UNIT_CLUSTER="wifibroadcast-cluster@${PROFILE}.service"
+
+usage() {
+  cat <<USAGE
+wfb-rlyctl - Relay control tool for WFB-ng
+
+Usage:
+  wfb-rlyctl status
+  wfb-rlyctl list-nics
+  wfb-rlyctl get-nics
+  sudo wfb-rlyctl set-nics <iface1> [iface2 ...]
+  sudo wfb-rlyctl restart
+  sudo wfb-rlyctl use-standalone
+  sudo wfb-rlyctl use-cluster
+
+Notes:
+- Standalone unit: ${UNIT_STANDALONE}
+- Cluster unit:     ${UNIT_CLUSTER}
+- ENV file:         ${ENV_FILE}
+- set-nics updates WFB_NICS in ${ENV_FILE} and restarts standalone service.
+USAGE
+}
+
+need_root() {
+  if [ "${EUID:-$(id -u)}" -ne 0 ]; then
+    echo "ERROR: run as root (sudo)."
+    exit 1
+  fi
+}
+
+list_nics() {
+  echo "=== ip link (wl*/wlan*) ==="
+  ip -o link show | awk -F': ' '{print $2}' | grep -E '^(wl|wlan)' || true
+  echo
+  echo "=== iw dev ==="
+  iw dev 2>/dev/null || true
+}
+
+get_nics() {
+  if [ -f "$ENV_FILE" ]; then
+    # shellcheck disable=SC1090
+    source "$ENV_FILE" 2>/dev/null || true
+  fi
+  echo "${WFB_NICS:-}"
+}
+
+set_nics() {
+  need_root
+  if [ "$#" -lt 1 ]; then
+    echo "ERROR: set-nics needs at least one interface name."
+    exit 1
+  fi
+
+  # Validate interface names exist (fail fast)
+  for nic in "$@"; do
+    if ! ip link show "$nic" >/dev/null 2>&1; then
+      echo "ERROR: interface '$nic' not found on relay."
+      echo "Tip: run: wfb-rlyctl list-nics"
+      exit 1
+    fi
+  done
+
+  local value="$*"
+  mkdir -p "$(dirname "$ENV_FILE")"
+  touch "$ENV_FILE"
+
+  # Replace or append WFB_NICS="..."
+  if grep -qE '^[[:space:]]*WFB_NICS=' "$ENV_FILE"; then
+    sed -i -E "s|^[[:space:]]*WFB_NICS=.*|WFB_NICS=\"${value}\"|g" "$ENV_FILE"
+  else
+    echo "WFB_NICS=\"${value}\"" >> "$ENV_FILE"
+  fi
+
+  echo "OK: Updated ${ENV_FILE}: WFB_NICS=\"${value}\""
+  echo "Restarting ${UNIT_STANDALONE}..."
+  systemctl daemon-reload
+  systemctl restart "$UNIT_STANDALONE"
+  systemctl --no-pager --full status "$UNIT_STANDALONE" | sed -n '1,18p'
+}
+
+restart_unit() {
+  need_root
+  systemctl daemon-reload
+  systemctl restart "$UNIT_STANDALONE"
+  systemctl --no-pager --full status "$UNIT_STANDALONE" | sed -n '1,18p'
+}
+
+use_standalone() {
+  need_root
+  systemctl disable --now "$UNIT_CLUSTER" >/dev/null 2>&1 || true
+  systemctl enable --now "$UNIT_STANDALONE"
+  echo "OK: Standalone enabled and running: $UNIT_STANDALONE"
+  systemctl --no-pager --full status "$UNIT_STANDALONE" | sed -n '1,18p'
+}
+
+use_cluster() {
+  need_root
+  systemctl disable --now "$UNIT_STANDALONE" >/dev/null 2>&1 || true
+  systemctl enable --now "$UNIT_CLUSTER"
+  echo "OK: Cluster enabled and running: $UNIT_CLUSTER"
+  systemctl --no-pager --full status "$UNIT_CLUSTER" | sed -n '1,18p'
+}
+
+status_all() {
+  echo "PROFILE=$PROFILE"
+  echo "--- ENV ($ENV_FILE) ---"
+  [ -f "$ENV_FILE" ] && sed -n '1,60p' "$ENV_FILE" || echo "(missing)"
+  echo
+  echo "--- systemd ---"
+  systemctl --no-pager --full status "$UNIT_STANDALONE" 2>/dev/null | sed -n '1,12p' || true
+  echo
+  systemctl --no-pager --full status "$UNIT_CLUSTER" 2>/dev/null | sed -n '1,12p' || true
+}
+
+cmd="${1:-}"
+shift || true
+
+case "$cmd" in
+  status)          status_all ;;
+  list-nics)       list_nics ;;
+  get-nics)        get_nics ;;
+  set-nics)        set_nics "$@" ;;
+  restart)         restart_unit ;;
+  use-standalone)  use_standalone ;;
+  use-cluster)     use_cluster ;;
+  ""|-h|--help)    usage ;;
+  *) echo "Unknown command: $cmd"; echo; usage; exit 1 ;;
+esac
