@@ -3,6 +3,8 @@
 ## 1) Hardware
 - **Board:** Raspberry Pi 5
 - **Hostname:** vind-rly
+- **User:** vind-admin (admin login) | vind-gs (GS user)
+- **SSH:** `ssh vind-admin@10.5.5.77` | sudo password: 1987
 - **OS:** Ubuntu 24.04.2 LTS (Noble Numbat)
 - **Kernel:** 6.8.0-1018-raspi (aarch64)
 - **Role:** WFB-NG ground station relay + SSH tunnel to drone companion
@@ -10,11 +12,17 @@
 ## 2) Network Interfaces
 | Interface | IP | Role |
 |---|---|---|
-| eth0 | — | Ethernet (no carrier) |
-| wlan0 | — | Onboard WiFi (unused) |
-| wlx00c0cab6db3b | — | WFB-NG WiFi adapter (rtl8812eu) |
-| p2p-wlan0-0 | 10.5.6.101/24 | P2P WiFi — ground station LAN |
+| eth0 | — | Ethernet — used to connect CPE610 OpenWrt node for WFB-NG cluster mode |
+| wlan0 | — | Onboard WiFi — P2P group owner for ground station PC connection |
+| wlx00c0cab6db3b | — | WFB-NG RF adapter (rtl8812eu) — air link to drone |
+| p2p-wlan0-0 | 10.5.6.101/24 | P2P WiFi interface — ground station LAN |
 | gs-wfb | 10.5.5.77/24 | WFB-NG tunnel to drone (10.5.5.87) |
+
+### Ground Station (GCS)
+- **GCS IP:** 10.5.6.50 (static — QGroundControl PC on p2p-wlan0-0 LAN)
+- **Video:** WFB-NG `gs_video` → `connect://10.5.6.50:5600`
+- **MAVLink:** mavlink-router → QGC `10.5.6.50:14550` (via WFB-NG gs_mavlink→127.0.0.1:14560)
+- **SSH to drone via relay:** `ssh -p 2222 roz@10.5.5.77`
 
 ## 3) Key Services
 | Service | Status | Function |
