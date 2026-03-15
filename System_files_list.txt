@@ -22,3 +22,5 @@ home/vind-admin/Rtps_Server/mediamtx.yml
 etc/mavlink-router/main.conf
 etc/systemd/system/mavlink.router.service
 etc/sid.conf
+usr/local/sbin/wfb-rlyctl
+etc/sudoers.d/wfb-rlyctl

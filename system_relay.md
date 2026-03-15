@@ -17,14 +17,15 @@
 | gs-wfb | 10.5.5.77/24 | WFB-NG tunnel to drone (10.5.5.87) |
 
 ## 3) Key Services
-| Service | Function |
-|---|---|
-| wifibroadcast@gs.service | WFB-NG ground station profile |
-| ssh-tunnel-to-companion.service | autossh: port 2222 → drone 10.5.5.87:22 |
-| mediamtx.service | Low-latency RTSP server (video relay to GCS) |
-| isc-dhcp-server.service | DHCP server for 10.5.6.0/24 (range .50–.99) |
-| netfilter-persistent.service | Persistent iptables rules |
-| relay_files_sync.timer | Auto-backup of system files (boot + daily) |
+| Service | Status | Function |
+|---|---|---|
+| wifibroadcast@gs.service | ACTIVE | WFB-NG ground station profile (standalone mode) |
+| mavlink.router.service | ACTIVE | MAVLink routing WFB→QGC + antenna tracker |
+| ssh-tunnel-to-companion.service | ACTIVE | autossh: port 2222 → drone 10.5.5.87:22 |
+| relay_files_sync.timer | ACTIVE | Auto-backup of system files (boot + daily) |
+| mediamtx.service | DISABLED | RTSP video relay — disabled 2026-03-15 (latency) |
+| isc-dhcp-server.service | DISABLED | DHCP for 10.5.6.0/24 — disabled 2026-03-15 (GCS uses static IP 10.5.6.50) |
+| netfilter-persistent.service | present | Persistent iptables rules |
 
 ## 4) Ports
 | Port | Service |
@@ -49,26 +50,38 @@
 - **Cluster:** 10.5.7.102 (second node, phy0-mon0)
 - **GS tunnel IP:** 10.5.5.77/24
 
-## 7) MediaMTX (RTSP Video Relay)
+## 7) MediaMTX (RTSP Video Relay) — DISABLED 2026-03-15
 - **Binary:** ~/Rtps_Server/mediamtx
 - **Config:** ~/Rtps_Server/mediamtx.yml
-- **Service:** mediamtx.service
-- **Role:** Receives video from WFB-NG and re-streams to GCS (e.g. QGroundControl)
+- **Service:** mediamtx.service (disabled — caused latency issues)
+- **Role:** Was re-streaming WFB-NG video to GCS — replaced by direct WFB-NG GS endpoint
 
-## 8) DHCP Server
-- **Service:** isc-dhcp-server.service
+## 8) DHCP Server — DISABLED 2026-03-15
+- **Service:** isc-dhcp-server.service (disabled — GCS uses static IP 10.5.6.50)
 - **Config:** /etc/dhcp/dhcpd.conf
 - **Subnet:** 10.5.6.0/24
 - **Range:** 10.5.6.50 – 10.5.6.99
 - **Router:** 10.5.6.1
 
-## 9) Local Scripts
+## 9) Local Scripts & Control Tools
 | Script | Location | Function |
 |---|---|---|
+| wfb-rlyctl | /usr/local/sbin/wfb-rlyctl | WFB-NG relay control: mode switch, NIC config, restart |
 | rely_p2p.sh | ~/rely_p2p.sh | P2P WiFi setup |
 | start_p2p_on_wlan0.sh | ~/start_p2p_on_wlan0.sh | P2P on wlan0 |
 | bg10_producer_rgb.py | /usr/local/bin/ | Camera raw frame producer |
 | wfbng_install.sh | ~/ | WFB-NG install script |
+
+### wfb-rlyctl usage
+```bash
+wfb-rlyctl status                  # show current mode, ENV, service states
+wfb-rlyctl list-nics               # list available wireless interfaces
+sudo wfb-rlyctl use-standalone     # switch to standalone mode (wifibroadcast@gs)
+sudo wfb-rlyctl use-cluster        # switch to cluster mode (wifibroadcast-cluster@gs)
+sudo wfb-rlyctl set-nics <iface>   # update WFB_NICS in /etc/default/wifibroadcast + restart
+sudo wfb-rlyctl restart            # restart active standalone service
+```
+Sudoers: `/etc/sudoers.d/wfb-rlyctl` (passwordless sudo scoped to this script)
 
 ## 10) Source Repos (built locally)
 | Project | Location | Remote |
@@ -203,11 +216,10 @@ Service: `mavlink.router.service` — enabled and running.
 
 The relay can run in two modes — switch by starting/stopping different systemd services:
 
-### Mode A — Standalone (default)
+### Mode A — Standalone (default) ← CURRENT
 Single GS node, only the relay's WiFi adapter:
 ```bash
-sudo systemctl stop wifibroadcast-cluster@gs.service
-sudo systemctl start wifibroadcast@gs.service
+sudo wfb-rlyctl use-standalone
 ```
 - Service: `wifibroadcast@gs.service`
 - Uses: `--wlans wlx00c0cab6db3b`
@@ -215,8 +227,7 @@ sudo systemctl start wifibroadcast@gs.service
 ### Mode B — Cluster (distributed, adds OpenWrt node)
 Two RF nodes: relay (wlx00c0cab6db3b) + OpenWrt CPE610 (10.5.7.102, phy0-mon0):
 ```bash
-sudo systemctl stop wifibroadcast@gs.service
-sudo systemctl start wifibroadcast-cluster@gs.service
+sudo wfb-rlyctl use-cluster
 ```
 - Service: `wifibroadcast-cluster@gs.service`
 - Uses: `wfb-server --profiles gs --cluster ssh` (WFB_CLUSTER_MODE in env)
