@@ -4,7 +4,7 @@
 - **Board:** Raspberry Pi 5
 - **Hostname:** vind-rly
 - **User:** vind-admin (admin login) | vind-gs (GS user)
-- **SSH:** `ssh vind-admin@10.5.5.77` | sudo password: 1987
+- **SSH:** `ssh vind-admin@10.5.5.77`
 - **OS:** Ubuntu 24.04.2 LTS (Noble Numbat)
 - **Kernel:** 6.8.0-1018-raspi (aarch64)
 - **Role:** WFB-NG ground station relay + SSH tunnel to drone companion
