@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -uo pipefail
 
 repo_root="/home/vind-admin/codex-relay"
 dest="$repo_root/System_files"
@@ -13,7 +13,8 @@ ts() { date '+%Y-%m-%d %H:%M:%S'; }
 
 echo "[$(ts)] sync start" >> "$log"
 
-rsync -rlptD --relative --ignore-missing-args   --files-from="$list" / "$dest" >> "$log" 2>&1
+rsync -rlptD --relative --ignore-missing-args --ignore-errors \
+  --files-from="$list" / "$dest" >> "$log" 2>&1 || true
 
 cd "$repo_root"
 
@@ -26,15 +27,16 @@ fi
 change_summary="$(git diff --cached --name-status | sed 's/^/- /')"
 timestamp="$(date '+%Y-%m-%d %H:%M')"
 
-if ! grep -q '^\#\# Auto Sync Log' "$md_file" 2>/dev/null; then
+if ! grep -q '^## Auto Sync Log' "$md_file" 2>/dev/null; then
   printf '\n## Auto Sync Log\n' >> "$md_file"
 fi
 printf '**%s**\n%s\n' "$timestamp" "$change_summary" >> "$md_file"
 
 git add "$md_file" >> "$log" 2>&1 || true
-git -c user.name='auto-sync' -c user.email='auto-sync@local'   commit -m "Auto-sync: ${timestamp}" >> "$log" 2>&1
+git -c user.name='auto-sync' -c user.email='auto-sync@local' \
+  commit -m "Auto-sync: ${timestamp}" >> "$log" 2>&1
 
 tag_name="sync-$(date '+%Y%m%d-%H%M')"
-git tag -a "$tag_name" -m "Auto-sync changes:\n${change_summary}" >> "$log" 2>&1
+git tag -a "$tag_name" -m "Auto-sync changes" >> "$log" 2>&1
 
 echo "[$(ts)] sync complete" >> "$log"
