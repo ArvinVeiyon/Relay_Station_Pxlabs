@@ -75,6 +75,7 @@
 | Script | Location | Function |
 |---|---|---|
 | wfb-rlyctl | /usr/local/sbin/wfb-rlyctl | WFB-NG relay control: mode switch, NIC config, restart |
+| wfb-cfg-apply | /usr/local/sbin/wfb-cfg-apply | Safe wifibroadcast.cfg apply + rollback watchdog (QGC-driven) — **755 root:root** |
 | rely_p2p.sh | ~/rely_p2p.sh | P2P WiFi setup |
 | start_p2p_on_wlan0.sh | ~/start_p2p_on_wlan0.sh | P2P on wlan0 |
 | bg10_producer_rgb.py | /usr/local/bin/ | Camera raw frame producer |
@@ -90,6 +91,51 @@ sudo wfb-rlyctl set-nics <iface>   # update WFB_NICS in /etc/default/wifibroadca
 sudo wfb-rlyctl restart            # restart active standalone service
 ```
 Sudoers: `/etc/sudoers.d/wfb-rlyctl` (passwordless sudo scoped to this script)
+
+### wfb-cfg-apply — safe config apply & watchdog
+Every WFB/`wifibroadcast.cfg` change pushed from the ground (QGC → *Settings → WFB Config*)
+is applied through this script, **never** by editing `/etc/wifibroadcast.cfg` directly. It is the
+safety net that guarantees a bad RF setting can never permanently kill the link. The script is
+**byte-identical to the companion's** (verified by sha256) — source of record is the device.
+
+- **Script:** `/usr/local/sbin/wfb-cfg-apply` — **must be `755 root:root`** (tracked in
+  `System_files/usr/local/sbin/wfb-cfg-apply`). Restore rsync runs as root with `-p`, so this is
+  re-asserted automatically on reflash.
+- **Log:** `/var/log/wfb-cfg-apply.log`
+- **Confirm file:** `/run/wfb-cfg-confirm` — the ground station `touch`es it over SSH once it can
+  reach the relay again after the restart. Present = "keep the new config".
+- **Backup:** `/etc/wifibroadcast.cfg.bak` (auto, per apply). **Default baseline:**
+  `/etc/wifibroadcast.cfg.default` (QGC *Restore Default* — tracked in
+  `System_files/etc/wifibroadcast.cfg.default`; this file is relay-specific, **not** the same as
+  the companion's).
+
+**Invocation** (by `pxlabs_cli` over SSH; QGC is the authoring UI):
+```bash
+sudo wfb-cfg-apply <new-cfg-path> [timeout-seconds]   # callers stage to /tmp/wfb-new.cfg
+```
+`pxlabs_cli` commands: `wfb-config set` (one side), `wfb-config set-both` (both ends — relay
+applied first, then companion; neither confirmed until both applied, any failure rolls **both**
+back so the two configs always match), `wfb-config restore-default` (applies `.default`).
+
+**Flow:** sanity-check new cfg (`[common]`/`[base]`/`[video]` sections; refuses if target is
+`/etc/wifibroadcast.cfg` itself) → back up to `.bak`, install → restart the **active** WFB unit →
+background watchdog (`nohup`+`disown`, survives SSH drop) waits up to `timeout` s for
+`/run/wfb-cfg-confirm`; no confirm → **restore `.bak` + restart** (self-healing).
+
+**Active-unit auto-detection:** matches only template instances in `running` state
+(`wifibroadcast@*` / `wifibroadcast-cluster@*`); the oneshot `wifibroadcast.service`
+(`active (exited)`) is excluded. On this relay that resolves to **`wifibroadcast@gs` in
+standalone mode (current)** or **`wifibroadcast-cluster@gs` in cluster mode** — the script handles
+both automatically (see §13 for mode switching).
+
+**Timeouts the ground uses:** single-side apply **60 s**; `set-both` — relay `N` (60 normal /
+120 for channel/bandwidth), companion `2·N+60` (180 / 300 s) so the companion window outlives the
+relay phase. Channel/bandwidth are TIER2 "danger" params (must match both ends, require
+`--danger-ack`); MCS/TX-power/STBC/LDPC/FEC are TIER1 (one side, other adapts).
+
+> PC-side reference copy: `tools/reference/wfb-cfg-apply` in the QGC repo
+> (`PXLABS_qgroundcontrol`), full design in its `WFB_CONFIG_EDITOR.md`. If they disagree, the
+> device wins.
 
 ## 10) Source Repos (built locally)
 | Project | Location | Remote |
@@ -109,7 +155,8 @@ Sudoers: `/etc/sudoers.d/wfb-rlyctl` (passwordless sudo scoped to this script)
 - **Repo:** ~/codex-relay
 - **Script:** ~/codex-relay/scripts/system_files_sync.sh
 - **Timer:** relay_files_sync.timer (boot + daily)
-- **Tracked files:** System_files_list.txt
+- **Tracked files:** System_files_list.txt (now includes `usr/local/sbin/wfb-cfg-apply` — restore
+  as `755 root:root` — and `etc/wifibroadcast.cfg.default`; see §9)
 
 ## 8) Install + Recovery Runbook
 
