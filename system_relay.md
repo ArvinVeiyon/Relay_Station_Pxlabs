@@ -344,6 +344,7 @@ If relay is rebooted, this service must restart automatically — it is enabled 
 | `v1.0.1` | `6c46493` | 2026-03-15 | WFB-NG cluster/standalone mode; cluster service, SSH key, mediamtx config |
 | `v1.0.2` | `ae857c9` | 2026-03-15 | Security: remove sudo password from docs; network docs, GCS details |
 | `v1.0.3` | `01f4186` | 2026-07-10 | wfb-rlyctl backup, channel 157→161, sync script fix (rsync resilience + regex) |
+| `v1.0.4` | `9ee8e03` | 2026-07-10 | Fix cluster [cluster] section (wiped 2026-02-22), correct ssh_key path, full WFB-NG config reference, GCS interface docs |
 
 ## Auto Sync Log
 
