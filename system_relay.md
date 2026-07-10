@@ -52,7 +52,7 @@
 ## 6) WFB-NG Configuration
 - **Config:** /etc/wifibroadcast.cfg
 - **Profile:** gs (ground station)
-- **WiFi channel:** 157 (5 GHz), region BO, TX power 30 dBm (rtl8812eu)
+- **WiFi channel:** 161 (5 GHz), region BO, TX power 30 dBm (rtl8812eu)
 - **MCS:** 1, BW 20 MHz
 - **Keys:** /etc/gs.key, /etc/drone.key
 - **Cluster:** 10.5.7.102 (second node, phy0-mon0)
@@ -110,6 +110,10 @@ Sudoers: `/etc/sudoers.d/wfb-rlyctl` (passwordless sudo scoped to this script)
 - **Script:** ~/codex-relay/scripts/system_files_sync.sh
 - **Timer:** relay_files_sync.timer (boot + daily)
 - **Tracked files:** System_files_list.txt
+
+> **No internet on relay** — `codex-relay` has no configured remote and relay cannot reach GitHub.
+> All pushes to GitHub (`ArvinVeiyon/Relay_Station_Pxlabs`) must be done via the companion mirror:
+> `~/codex-relay-mirror` on Vind-Roz → fetch from relay via SSH → push to GitHub.
 
 ## 8) Install + Recovery Runbook
 
@@ -217,6 +221,50 @@ Service: `mavlink.router.service` — enabled and running.
 - Always confirm current reachable relay IP before making network changes
 - Prefer applying one network subsystem at a time (WFB → management LAN → P2P)
 - Avoid enabling competing managers on same interface during bring-up
+
+## 14) GCS Interface — G-Control (PXLABS QGC)
+
+G-Control (ArvinVeiyon/PXLABS_qgroundcontrol, branch: master) controls the relay directly via SSH,
+separate from the companion SSH tunnel.
+
+### Relay SSH access from GCS
+```
+G-Control.exe (10.5.6.50) → pxlabs_cli.exe relay <action>
+  → Paramiko SSH → vind-admin@10.5.5.77:22  (direct, NOT via tunnel)
+  → command executes on relay
+```
+
+### Commands GCS fires on relay
+| GCS Action | SSH Command |
+|---|---|
+| relay wfb switch --mode standalone | `sudo /usr/local/sbin/wfb-rlyctl use-standalone` |
+| relay wfb switch --mode cluster | `sudo /usr/local/sbin/wfb-rlyctl use-cluster` |
+| relay wfb status | `wfb-rlyctl status` |
+| relay wfb logs | `journalctl -u wifibroadcast@gs + wifibroadcast-cluster@gs` |
+| relay wfb set-nics | `sudo wfb-rlyctl set-nics <iface>` |
+| relay reboot | `sudo systemd-run --on-active=0 systemctl reboot` |
+| relay shutdown | `sudo systemd-run --on-active=0 systemctl poweroff` |
+| relay ssh-terminal | opens SSH terminal window on GCS PC |
+| services refresh/start/stop (--target relay) | `systemctl is-active/enable/disable` etc. |
+
+SSH user: `vind-admin` | Password: keyring / env `PXLABS_RELAY_PASSWORD`
+
+> `wfb-rlyctl` sudoers: `/etc/sudoers.d/wfb-rlyctl` — passwordless sudo scoped to this script.
+> GCS polls WFB mode on panel open and after every switch (4 s settle timer).
+> Pull tab in G-Control shows: ◉ standalone (green) / ⬡ cluster (blue) / ⊙ unknown (dim).
+
+### Critical dependency
+`ssh-tunnel-to-companion.service` (autossh) must be running on relay for GCS to SSH to companion.
+If relay is rebooted, this service must restart automatically — it is enabled and set to restart on failure.
+
+## 15) Release History
+
+| Tag | Commit | Date | Key Changes |
+|---|---|---|---|
+| `v1.0.0` | `2695911` | 2026-02-22 | Initial relay backup: system files, docs, sync infrastructure |
+| `v1.0.1` | `6c46493` | 2026-03-15 | WFB-NG cluster/standalone mode; cluster service, SSH key, mediamtx config |
+| `v1.0.2` | `ae857c9` | 2026-03-15 | Security: remove sudo password from docs; network docs, GCS details |
+| `v1.0.3` | `01f4186` | 2026-07-10 | wfb-rlyctl backup, channel 157→161, sync script fix (rsync resilience + regex) |
 
 ## Auto Sync Log
 
