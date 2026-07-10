@@ -50,13 +50,92 @@
 - **Key used:** /home/vind-admin/.ssh/id_rsa (must be authorized on drone)
 
 ## 6) WFB-NG Configuration
-- **Config:** /etc/wifibroadcast.cfg
-- **Profile:** gs (ground station)
-- **WiFi channel:** 161 (5 GHz), region BO, TX power 30 dBm (rtl8812eu)
-- **MCS:** 1, BW 20 MHz
-- **Keys:** /etc/gs.key, /etc/drone.key
-- **Cluster:** 10.5.7.102 (second node, phy0-mon0)
-- **GS tunnel IP:** 10.5.5.77/24
+
+Config file: `/etc/wifibroadcast.cfg` | Profile used: **gs** (ground station)
+Relay runs only the `gs` profile — never `drone`. The `[drone]` section in the config is present for reference only.
+
+> **⚠ History warning:** On 2026-02-22, the `[cluster]` section was accidentally wiped during
+> a mavlink-router setup session. Someone edited the live config and replaced it with an empty
+> template. The auto-sync committed the wiped state. All tags from v1.0.0 to v1.0.2 had the
+> empty cluster section. Fixed 2026-07-10 (v1.0.3). If cluster mode ever breaks with
+> `Cluster is empty!` — this section was wiped again. Restore from below.
+
+### RF Settings
+| Parameter | Value | Notes |
+|---|---|---|
+| `wifi_channel` | 161 | 5 GHz — matches drone side exactly |
+| `wifi_region` | BO | Bolivia — allows higher TX power |
+| `wifi_txpower` | 3000 | 30 dBm × 100 (rtl8812eu driver unit) |
+| `bandwidth` | 20 MHz | 20 MHz channel width |
+| `mcs_index` | 1 | BPSK 1/2 — robust low-rate modulation |
+| `stbc` | 1 | Space-time block coding enabled |
+| `ldpc` | 1 | Low-density parity check enabled |
+| `short_gi` | False | Standard guard interval |
+
+### Modes
+| Mode | Service | Command |
+|---|---|---|
+| Standalone (default) | `wifibroadcast@gs.service` | `sudo wfb-rlyctl use-standalone` |
+| Cluster (+CPE610) | `wifibroadcast-cluster@gs.service` | `sudo wfb-rlyctl use-cluster` |
+
+### GS Profile Streams
+| Stream | Direction | Stream ID | Service type | Peer |
+|---|---|---|---|---|
+| video | RX only | 0x00 | `udp_direct_rx` | → `connect://10.5.6.50:5600` (GCS) |
+| mavlink | RX 0x10 / TX 0x90 | — | `mavlink` | → `connect://127.0.0.1:14560` (mavlink-router) |
+| tunnel | RX 0x20 / TX 0xa0 | — | `tunnel` | ifname `gs-wfb` @ `10.5.5.77/24` |
+
+> **mavlink peer is `127.0.0.1:14560`** (local mavlink-router), NOT direct to QGC.
+> mavlink-router then routes to QGC (`10.5.6.50:14550`) + antenna tracker (`127.0.0.1:14551`).
+> `default_route = False` on gs_tunnel — critical, do not change.
+
+### Cluster Section — Full Reference Config
+> This is the correct populated cluster section. Keep this here as the restore reference.
+> The only bug in the original (2695911 initial commit) was `ssh_key` pointing to `/root/.ssh/`
+> instead of `/home/vind-admin/.ssh/` — corrected here.
+
+```ini
+[cluster]
+# Two nodes: relay's own NIC (127.0.0.1) + CPE610 OpenWrt node (10.5.7.102)
+# wlx00c0cab6db3b = relay's RTL8812EU WiFi adapter (wlan side)
+# phy0-mon0       = CPE610's monitor-mode interface, initialized via wfb-mon0.sh
+nodes = {'127.0.0.1': {'wlans': ['wlx00c0cab6db3b']}, '10.5.7.102': {'wlans': ['phy0-mon0'],'wifi_txpower': None,'custom_init_script': '/usr/sbin/wfb-mon0.sh'}}
+
+ssh_user = 'root'           # CPE610 is OpenWrt — root user
+ssh_port = 22               # standard SSH port on CPE610
+ssh_key  = '/home/vind-admin/.ssh/wfb_cluster_ed25519'   # NOT /root/.ssh/ — vind-admin owns key
+server_address = '10.5.7.100'   # relay's own eth0 IP — CPE610 connects BACK to this
+base_port_server = 10000    # relay listens on these ports for CPE610 data
+base_port_node   = 11000    # CPE610 listens on these for relay data
+api_port  = 8203
+stats_port = 8303
+```
+
+**Parameter meanings:**
+| Parameter | Meaning |
+|---|---|
+| `nodes` | Dict of cluster nodes: key=address, value=NIC config |
+| `127.0.0.1` | Relay itself — uses its local WFB adapter |
+| `10.5.7.102` | CPE610 — reached via relay eth0 (10.5.7.0/24 subnet) |
+| `custom_init_script` | Script on CPE610 that puts phy0 into monitor mode for WFB-NG |
+| `ssh_key` | Ed25519 key for relay→CPE610 SSH (root@10.5.7.102) |
+| `server_address` | Relay's eth0 IP — CPE610 opens connections BACK to relay on this |
+| `base_port_server` | Base port for relay's RX/TX servers (mavlink=10001, tunnel=10002) |
+| `base_port_node` | Base port for CPE610's RX/TX (mavlink=11001, tunnel=11002) |
+
+**Verify cluster is working:**
+```bash
+sudo wfb-rlyctl use-cluster
+sudo journalctl -u wifibroadcast-cluster@gs.service -f
+# Should NOT see "Cluster is empty!" — should see wfb_tx processes connecting to 10.5.7.102
+ps aux | grep wfb_tx   # should show 10.5.7.102 in args
+```
+
+### Network
+- WFB adapter: `wlx00c0cab6db3b` (RTL8812EU)
+- GS tunnel interface: `gs-wfb` @ `10.5.5.77/24`
+- Cluster eth0: `10.5.7.100/24` (relay ↔ CPE610 at `10.5.7.102`)
+- Keys: `/etc/gs.key` + `/etc/drone.key`
 
 ## 7) MediaMTX (RTSP Video Relay) — DISABLED 2026-03-15
 - **Binary:** ~/Rtps_Server/mediamtx
