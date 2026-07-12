@@ -4,6 +4,7 @@ etc/ssh/sshd_config
 etc/ssh/sshd_config.d
 etc/netplan
 etc/wifibroadcast.cfg
+etc/wifibroadcast.cfg.default
 etc/default/wifibroadcast
 etc/systemd/system/wifibroadcast@gs.service
 etc/systemd/system/ssh-tunnel-to-companion.service
@@ -23,4 +24,5 @@ etc/mavlink-router/main.conf
 etc/systemd/system/mavlink.router.service
 etc/sid.conf
 usr/local/sbin/wfb-rlyctl
+usr/local/sbin/wfb-cfg-apply
 etc/sudoers.d/wfb-rlyctl
