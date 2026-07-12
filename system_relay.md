@@ -392,6 +392,7 @@ If relay is rebooted, this service must restart automatically — it is enabled 
 | `v1.0.2` | `ae857c9` | 2026-03-15 | Security: remove sudo password from docs; network docs, GCS details |
 | `v1.0.3` | `01f4186` | 2026-07-10 | wfb-rlyctl backup, channel 157→161, sync script fix (rsync resilience + regex) |
 | `v1.0.4` | `9ee8e03` | 2026-07-10 | Fix cluster [cluster] section (wiped 2026-02-22), correct ssh_key path, full WFB-NG config reference, GCS interface docs |
+| `v1.0.5` | `58e6432` | 2026-07-12 | WFB safe-apply watchdog (wfb-cfg-apply, 755 root:root) + wifibroadcast.cfg.default tracked; relay history reconciled with GitHub |
 
 ## Auto Sync Log
 
