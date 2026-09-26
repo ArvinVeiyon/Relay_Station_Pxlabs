@@ -393,6 +393,7 @@ If relay is rebooted, this service must restart automatically — it is enabled 
 | `v1.0.3` | `01f4186` | 2026-07-10 | wfb-rlyctl backup, channel 157→161, sync script fix (rsync resilience + regex) |
 | `v1.0.4` | `9ee8e03` | 2026-07-10 | Fix cluster [cluster] section (wiped 2026-02-22), correct ssh_key path, full WFB-NG config reference, GCS interface docs |
 | `v1.0.5` | `992b565` | 2026-07-12 | WFB safe-apply watchdog (wfb-cfg-apply, 755 root:root) + wifibroadcast.cfg.default tracked; relay history reconciled with GitHub |
+| `v1.0.6` | `534343a` | 2026-09-26 | **First 2-node cluster verified on RF.** [cluster] block that actually runs (proven with CPE610 live on eth0), superseding the untested 08-28 restore; node script corrected 157→161; Cluster Init snippet fixed (was 10.5.6.102, wrong subnet) |
 
 ## Auto Sync Log
 
@@ -463,6 +464,26 @@ ssh -i ~/.ssh/wfb_cluster_ed25519 root@10.5.7.102 'bash /tmp/cpe610_node_init.sh
 - **WFB iface:** phy0-mon0
 - **Custom init script on node:** /usr/sbin/wfb-mon0.sh
 - **SSH:** root@10.5.7.102 via wfb_cluster_ed25519 key
+- **wfb-ng on the node:** `25.01-r1` (mips_24kc) vs `25.4.27.73439` on the relay and on the
+  drone/companion. Only the node is behind; relay and drone match exactly. Works, but close
+  it by rebuilding the .ipk when convenient.
+- **This node is a separate device, so the relay's sync list does not back it up.** Contents
+  of `/usr/sbin/wfb-mon0.sh` as of 2026-09-26 (corrected from 157 to 161; backup on the node
+  at `wfb-mon0.sh.bak-ch157`):
+  ```sh
+  #!/bin/sh
+  set -e
+  iw reg set IN 2>/dev/null || true
+  iw dev phy0-mon0 del 2>/dev/null || true
+  iw phy phy0 interface add phy0-mon0 type monitor flags otherbss || true
+  ip link set phy0-mon0 up
+  iw dev phy0-mon0 set channel 161 HT20 || true
+  iw dev phy0-mon0 set monitor otherbss 2>/dev/null || true
+  ```
+  Note this script runs **before** WFB-NG's generated init, which then re-applies
+  `iw reg set BO` and `set channel 161 HT20` from the config — so on both regdomain and
+  channel the generated script has the last word. Keeping this file correct matters only
+  for running it standalone.
 
 ### Cluster vs Standalone Summary
 | | Standalone | Cluster |
