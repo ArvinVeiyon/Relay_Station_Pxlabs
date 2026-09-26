@@ -393,7 +393,7 @@ If relay is rebooted, this service must restart automatically — it is enabled 
 | `v1.0.3` | `01f4186` | 2026-07-10 | wfb-rlyctl backup, channel 157→161, sync script fix (rsync resilience + regex) |
 | `v1.0.4` | `9ee8e03` | 2026-07-10 | Fix cluster [cluster] section (wiped 2026-02-22), correct ssh_key path, full WFB-NG config reference, GCS interface docs |
 | `v1.0.5` | `992b565` | 2026-07-12 | WFB safe-apply watchdog (wfb-cfg-apply, 755 root:root) + wifibroadcast.cfg.default tracked; relay history reconciled with GitHub |
-| `v1.0.6` | `534343a` | 2026-09-26 | **First 2-node cluster verified on RF.** [cluster] block that actually runs (proven with CPE610 live on eth0), superseding the untested 08-28 restore; node script corrected 157→161; Cluster Init snippet fixed (was 10.5.6.102, wrong subnet) |
+| `v1.0.6` | `60d063d` | 2026-09-26 | **First 2-node cluster verified on RF.** [cluster] block that actually runs (proven with CPE610 live on eth0), superseding the untested 08-28 restore; node script corrected 157→161; Cluster Init snippet fixed (was 10.5.6.102, wrong subnet) |
 
 ## Auto Sync Log
 
