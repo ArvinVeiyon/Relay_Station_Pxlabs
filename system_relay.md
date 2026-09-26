@@ -27,10 +27,16 @@
 ## 3) Key Services
 | Service | Status | Function |
 |---|---|---|
-| wifibroadcast@gs.service | ACTIVE | WFB-NG ground station profile (standalone mode) |
+| wifibroadcast-cluster@gs.service | **ACTIVE (since 2026-09-26)** | WFB-NG gs in **cluster** mode — 2 RF nodes, see §13 |
+| wifibroadcast@gs.service | INACTIVE | standalone gs — the alternative to the above; exactly one of the two runs |
 | mavlink.router.service | ACTIVE | MAVLink routing WFB→QGC + antenna tracker |
 | ssh-tunnel-to-companion.service | ACTIVE | autossh: port 2222 → drone 10.5.5.87:22 |
-| relay_files_sync.timer | ACTIVE | Auto-backup of system files (boot + daily) |
+| relay_files_sync.timer | **DISABLED (2026-09-26)** | was boot+daily; see §12 for why and how to run it by hand |
+
+> ⚠️ **Two MAVLink unit files exist and only one is real.** The live unit is
+> **`mavlink.router.service`** (dot). `mavlink-router.service` (dash) also exists and is
+> `disabled`/`inactive` — querying that one reports the router as dead while `mavlink-routerd`
+> is happily serving `:14560` and `:5760`. Check the process or the port, not the dashed name.
 | mediamtx.service | DISABLED | RTSP video relay — disabled 2026-03-15 (latency) |
 | isc-dhcp-server.service | DISABLED | DHCP for 10.5.6.0/24 — disabled 2026-03-15 (GCS uses static IP 10.5.6.50) |
 | netfilter-persistent.service | present | Persistent iptables rules |
@@ -233,7 +239,30 @@ relay phase. Channel/bandwidth are TIER2 "danger" params (must match both ends, 
 ## 12) Auto-Backup
 - **Repo:** ~/codex-relay
 - **Script:** ~/codex-relay/scripts/system_files_sync.sh
-- **Timer:** relay_files_sync.timer (boot + daily)
+- **Timer:** relay_files_sync.timer — **DISABLED 2026-09-26.** It was the engine behind two
+  history divergences: it commits locally on a box that cannot push, so the relay drifted ahead
+  of GitHub every day until someone reconciled it by hand. The `.service` remains `static`, so
+  take a backup on demand instead:
+  ```bash
+  sudo systemctl start relay_files_sync.service
+  ```
+  Re-enable with `sudo systemctl enable --now relay_files_sync.timer` if you would rather have
+  daily commits and reconcile periodically. ⚠️ `systemctl mask` **fails** on this unit (it is a
+  real file in `/etc/systemd/system`); `disable` is the correct verb.
+- **Pushing from the relay is impossible** (no remote, no default route). GitHub is reached only
+  via the companion's `~/codex-relay-mirror`, and the relay is brought forward with a git bundle:
+  ```bash
+  # on the companion mirror
+  git fetch ssh://vind-admin@10.5.5.77/home/vind-admin/codex-relay \
+      '+refs/heads/master:refs/remotes/relay/master'
+  git merge --no-ff relay/master && git push origin master
+  git bundle create /tmp/relay.bundle master ^<relay HEAD>
+  scp -O /tmp/relay.bundle vind-admin@10.5.5.77:/tmp/
+  # on the relay
+  git -C ~/codex-relay pull --ff-only /tmp/relay.bundle master
+  git -C ~/codex-relay fetch /tmp/relay.bundle '+refs/tags/*:refs/tags/*'   # the pull skips tags
+  ```
+  Verified twice: 2026-07-12 and 2026-09-26.
 - **Tracked files:** System_files_list.txt (now includes `usr/local/sbin/wfb-cfg-apply` — restore
   as `755 root:root` — and `etc/wifibroadcast.cfg.default`; see §9)
 
@@ -393,6 +422,7 @@ If relay is rebooted, this service must restart automatically — it is enabled 
 | `v1.0.3` | `01f4186` | 2026-07-10 | wfb-rlyctl backup, channel 157→161, sync script fix (rsync resilience + regex) |
 | `v1.0.4` | `9ee8e03` | 2026-07-10 | Fix cluster [cluster] section (wiped 2026-02-22), correct ssh_key path, full WFB-NG config reference, GCS interface docs |
 | `v1.0.5` | `992b565` | 2026-07-12 | WFB safe-apply watchdog (wfb-cfg-apply, 755 root:root) + wifibroadcast.cfg.default tracked; relay history reconciled with GitHub |
+| `v1.0.7` | `PENDING` | 2026-09-26 | **Stable relay checkpoint.** CPE610 node backed up (`Node_CPE610/`, PSK redacted); node script 157→161 applied; `relay_files_sync.timer` disabled — the re-divergence engine; relay/mirror/GitHub reconciled via bundle and all `v1.0.*` tags now on the box; service table corrected (cluster active, standalone inactive, `mavlink-router.service` decoy documented) |
 | `v1.0.6` | `60d063d` | 2026-09-26 | **First 2-node cluster verified on RF.** [cluster] block that actually runs (proven with CPE610 live on eth0), superseding the untested 08-28 restore; node script corrected 157→161; Cluster Init snippet fixed (was 10.5.6.102, wrong subnet) |
 
 ## Auto Sync Log
@@ -431,11 +461,13 @@ First end-to-end confirmation of Mode B on real RF. What was wrong and what prov
   The original backup `2695911` had a populated block, so this was a regression.
 - **The channel is not changed by the switch.** The link is 161 everywhere and stays there.
   The only interface tuned at cluster start is the CPE610's `phy0-mon0`, and it is tuned
-  *to* 161. `/usr/sbin/wfb-mon0.sh` on the node still contains a stale `set channel 157`,
-  but the generated init runs that script **first** and then issues
-  `iw dev phy0-mon0 set channel 161 HT20`, so 161 wins. Confirmed post-switch: the node
-  reports `channel 161 (5805 MHz)`. Fix the 157 line eventually — it is only a trap if
-  anyone runs that helper on its own.
+  *to* 161. `/usr/sbin/wfb-mon0.sh` on the node carried a stale `set channel 157`, but the
+  generated init runs that script **first** and then issues
+  `iw dev phy0-mon0 set channel 161 HT20`, so 161 won regardless. Confirmed post-switch: the
+  node reports `channel 161 (5805 MHz)`. **The 157 line was corrected to 161 on 2026-09-26**
+  (backup on the node at `wfb-mon0.sh.bak-ch157`); it only ever mattered if someone ran that
+  helper on its own. The same applies to regdomain: the helper sets `IN`, the generated init
+  then sets `BO` from the config.
 - **Proof of a genuine 2-node cluster:** both nodes SSH-initialised (`127.0.0.1` and
   `10.5.7.102`); the CPE610 forwards off-air MAVLink to `10.5.7.100:10001` over eth0 in
   continuous 1400-byte frames; drone-side decrypt errors 0; RSSI -28..-30 dB; MAVLink still
