@@ -467,6 +467,9 @@ ssh -i ~/.ssh/wfb_cluster_ed25519 root@10.5.7.102 'bash /tmp/cpe610_node_init.sh
 - **wfb-ng on the node:** `25.01-r1` (mips_24kc) vs `25.4.27.73439` on the relay and on the
   drone/companion. Only the node is behind; relay and drone match exactly. Works, but close
   it by rebuilding the .ipk when convenient.
+- 📁 **Full snapshot of the node lives in [`Node_CPE610/`](Node_CPE610/README.md)** — its UCI
+  config (PSK redacted), installed package list, `wfb-mon0.sh`, and the restore-after-reflash
+  procedure. Captured 2026-09-26; no script deploys it, restoring is manual.
 - **This node is a separate device, so the relay's sync list does not back it up.** Contents
   of `/usr/sbin/wfb-mon0.sh` as of 2026-09-26 (corrected from 157 to 161; backup on the node
   at `wfb-mon0.sh.bak-ch157`):
