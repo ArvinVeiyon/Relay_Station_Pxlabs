@@ -419,11 +419,40 @@ sudo wfb-rlyctl use-cluster
 - Nodes: `127.0.0.1` (relay) + `10.5.7.102` (OpenWrt CPE610)
 - SSH key: `/home/vind-admin/.ssh/wfb_cluster_ed25519` (used to init OpenWrt node)
 
+### VERIFIED WORKING — 2026-09-26
+First end-to-end confirmation of Mode B on real RF. What was wrong and what proves it works:
+
+- **The `[cluster]` block had been wiped** (replaced by the stock commented template
+  `#nodes = {}`) by commit `8ccd66a` "Auto-sync: 2026-02-22 18:48", during that day's
+  mavlink-router session. With it commented out, `wfb-server --cluster ssh` has no nodes
+  and aborts with `Cluster is empty!` — so `use-cluster` stopped standalone and then failed
+  to start cluster, i.e. **a switch from G-Control left the relay with no WFB server at all.**
+  The original backup `2695911` had a populated block, so this was a regression.
+- **The channel is not changed by the switch.** The link is 161 everywhere and stays there.
+  The only interface tuned at cluster start is the CPE610's `phy0-mon0`, and it is tuned
+  *to* 161. `/usr/sbin/wfb-mon0.sh` on the node still contains a stale `set channel 157`,
+  but the generated init runs that script **first** and then issues
+  `iw dev phy0-mon0 set channel 161 HT20`, so 161 wins. Confirmed post-switch: the node
+  reports `channel 161 (5805 MHz)`. Fix the 157 line eventually — it is only a trap if
+  anyone runs that helper on its own.
+- **Proof of a genuine 2-node cluster:** both nodes SSH-initialised (`127.0.0.1` and
+  `10.5.7.102`); the CPE610 forwards off-air MAVLink to `10.5.7.100:10001` over eth0 in
+  continuous 1400-byte frames; drone-side decrypt errors 0; RSSI -28..-30 dB; MAVLink still
+  reaching `mavlink-routerd` on `:14560` for QGC; tunnel 19/20 pings.
+- **`--cluster ssh` SSHes to *every* node, including `127.0.0.1`** — the cluster key must
+  therefore authorise `root@127.0.0.1` on the relay itself, not just the CPE610. It does.
+- **Version skew is on the ground side only:** relay wfb-ng `25.4.27.73439`, CPE610 node
+  `25.01-r1`. The drone/companion is `25.4.27.73439`, i.e. identical to the relay. The skew
+  works in practice but is worth closing by rebuilding the OpenWrt .ipk.
+
 ### Cluster Init (first time or after OpenWrt reflash)
+`--gen-init` takes the **node** address; the `-c` target inside the generated script comes
+from `server_address` in the `[cluster]` block (10.5.7.100 = relay eth0). Not needed for
+normal use — `--cluster ssh` does this automatically on every start.
 ```bash
-sudo wfb-server --profiles gs --gen-init 10.5.6.102 > /tmp/cpe610_node_init.sh
-scp -O -i ~/.ssh/wfb_cluster_ed25519 /tmp/cpe610_node_init.sh root@10.5.6.102:/tmp/
-ssh -i ~/.ssh/wfb_cluster_ed25519 root@10.5.6.102 'bash /tmp/cpe610_node_init.sh'
+sudo wfb-server --profiles gs --gen-init 10.5.7.102 > /tmp/cpe610_node_init.sh
+scp -O -i ~/.ssh/wfb_cluster_ed25519 /tmp/cpe610_node_init.sh root@10.5.7.102:/tmp/
+ssh -i ~/.ssh/wfb_cluster_ed25519 root@10.5.7.102 'bash /tmp/cpe610_node_init.sh'
 ```
 
 ### OpenWrt Node (CPE610)
