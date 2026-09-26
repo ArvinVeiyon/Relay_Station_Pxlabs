@@ -33,13 +33,18 @@
 | ssh-tunnel-to-companion.service | ACTIVE | autossh: port 2222 → drone 10.5.5.87:22 |
 | relay_files_sync.timer | **DISABLED (2026-09-26)** | was boot+daily; see §12 for why and how to run it by hand |
 
+| mediamtx.service | DISABLED | RTSP video relay — disabled 2026-03-15 (latency) |
+| isc-dhcp-server.service | DISABLED | DHCP for 10.5.6.0/24 — disabled 2026-03-15 (GCS uses static IP 10.5.6.50) |
+| netfilter-persistent.service | present | Persistent iptables rules |
+
 > ⚠️ **Two MAVLink unit files exist and only one is real.** The live unit is
 > **`mavlink.router.service`** (dot). `mavlink-router.service` (dash) also exists and is
 > `disabled`/`inactive` — querying that one reports the router as dead while `mavlink-routerd`
 > is happily serving `:14560` and `:5760`. Check the process or the port, not the dashed name.
-| mediamtx.service | DISABLED | RTSP video relay — disabled 2026-03-15 (latency) |
-| isc-dhcp-server.service | DISABLED | DHCP for 10.5.6.0/24 — disabled 2026-03-15 (GCS uses static IP 10.5.6.50) |
-| netfilter-persistent.service | present | Persistent iptables rules |
+
+> ⚠️ **`active` is not proof.** Units here have read `active` while the link carried nothing.
+> For WFB, measure: per-antenna counters on the JSON API (`:8103`), and packets from the node
+> (`sudo tcpdump -ni eth0 udp and src 10.5.7.102`).
 
 ## 4) Ports
 | Port | Service |
@@ -65,6 +70,16 @@ Relay runs only the `gs` profile — never `drone`. The `[drone]` section in the
 > template. The auto-sync committed the wiped state. All tags from v1.0.0 to v1.0.2 had the
 > empty cluster section. Fixed 2026-07-10 (v1.0.3). If cluster mode ever breaks with
 > `Cluster is empty!` — this section was wiped again. Restore from below.
+>
+> **It recurred, and the mechanism is now understood (2026-09-26).** The relay was found running
+> an older SD card whose repo line stops in March, so it still carried the wiped block — and
+> `wfb-rlyctl use-cluster` therefore stopped standalone and failed to start cluster, leaving the
+> relay with **no WFB server at all**. That is what "switching to cluster from G-Control does
+> nothing" looks like. The wipe itself was traced to commit `8ccd66a` (Auto-sync 2026-02-22
+> 18:48), twelve minutes after `/etc/mavlink-router/main.conf` was written: the config was
+> replaced wholesale with the package's stock template, and the auto-sync then committed the
+> damage. The sync is one-way (`/` → repo), so it only ever **records** such a loss.
+> `relay_files_sync.timer` is now disabled (§12) so a wiped state cannot be committed unnoticed.
 
 ### RF Settings
 | Parameter | Value | Notes |
@@ -96,26 +111,49 @@ Relay runs only the `gs` profile — never `drone`. The `[drone]` section in the
 > `default_route = False` on gs_tunnel — critical, do not change.
 
 ### Cluster Section — Full Reference Config
-> This is the correct populated cluster section. Keep this here as the restore reference.
-> The only bug in the original (2695911 initial commit) was `ssh_key` pointing to `/root/.ssh/`
-> instead of `/home/vind-admin/.ssh/` — corrected here.
+> **This is the block that is actually running and proven on RF (2026-09-26).** It replaced an
+> earlier reference version that was written on 2026-08-28 but never exercised, because the
+> CPE610 was not connected then. Keep this as the restore reference; it is byte-for-byte what
+> `/etc/wifibroadcast.cfg` holds.
 
 ```ini
 [cluster]
-# Two nodes: relay's own NIC (127.0.0.1) + CPE610 OpenWrt node (10.5.7.102)
-# wlx00c0cab6db3b = relay's RTL8812EU WiFi adapter (wlan side)
-# phy0-mon0       = CPE610's monitor-mode interface, initialized via wfb-mon0.sh
-nodes = {'127.0.0.1': {'wlans': ['wlx00c0cab6db3b']}, '10.5.7.102': {'wlans': ['phy0-mon0'],'wifi_txpower': None,'custom_init_script': '/usr/sbin/wfb-mon0.sh'}}
 
-ssh_user = 'root'           # CPE610 is OpenWrt — root user
-ssh_port = 22               # standard SSH port on CPE610
-ssh_key  = '/home/vind-admin/.ssh/wfb_cluster_ed25519'   # NOT /root/.ssh/ — vind-admin owns key
-server_address = '10.5.7.100'   # relay's own eth0 IP — CPE610 connects BACK to this
-base_port_server = 10000    # relay listens on these ports for CPE610 data
-base_port_node   = 11000    # CPE610 listens on these for relay data
-api_port  = 8203
-stats_port = 8303
+nodes = {
+          # Local card on the relay itself. server_address MUST be 127.0.0.1 for local cards.
+          '127.0.0.1':  { 'wlans': ['wlx00c0cab6db3b'],
+                          'server_address': '127.0.0.1' },
+
+          # OpenWrt CPE610 v2, reached over eth0. Monitor iface is created by the custom
+          # init script below; channel pinned to the link channel (161) explicitly.
+          '10.5.7.102': { 'wlans': ['phy0-mon0'],
+                          'ssh_user': 'root',
+                          'ssh_port': 22,
+                          'ssh_key': '/home/vind-admin/.ssh/wfb_cluster_ed25519',
+                          'custom_init_script': 'sh /usr/sbin/wfb-mon0.sh',
+                          'wifi_channel': 161,
+                          'wifi_txpower': None },
+        }
+
+ssh_user = 'root'
+ssh_port = 22
+ssh_key = '/home/vind-admin/.ssh/wfb_cluster_ed25519'
+custom_init_script = None
+server_address = '10.5.7.100'   # relay eth0 — the only address reachable from every node
+base_port_server = 10000
+base_port_node  = 11000
 ```
+
+Three deliberate differences from the older reference, each for a reason:
+
+| Change | Why |
+|---|---|
+| `custom_init_script` is `'sh /usr/sbin/wfb-mon0.sh'`, not a bare path | the snippet is pasted into the generated node script and run as a command, so a bare path depends on the helper's execute bit |
+| `'wifi_channel': 161` on the node | pins the node to the link channel explicitly rather than inheriting |
+| no `api_port` / `stats_port` in `[cluster]` | not part of the `master.cfg` cluster schema; the `gs` profile already supplies 8003/8103 |
+
+`--cluster ssh` SSHes to **every** node, `127.0.0.1` included, so the cluster key must also
+authorise `root@127.0.0.1` on the relay itself — not only the CPE610.
 
 **Parameter meanings:**
 | Parameter | Meaning |
