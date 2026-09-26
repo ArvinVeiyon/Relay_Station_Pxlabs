@@ -32,7 +32,6 @@
 | mavlink.router.service | ACTIVE | MAVLink routing WFB→QGC + antenna tracker |
 | ssh-tunnel-to-companion.service | ACTIVE | autossh: port 2222 → drone 10.5.5.87:22 |
 | relay_files_sync.timer | **DISABLED (2026-09-26)** | was boot+daily; see §12 for why and how to run it by hand |
-
 | mediamtx.service | DISABLED | RTSP video relay — disabled 2026-03-15 (latency) |
 | isc-dhcp-server.service | DISABLED | DHCP for 10.5.6.0/24 — disabled 2026-03-15 (GCS uses static IP 10.5.6.50) |
 | netfilter-persistent.service | present | Persistent iptables rules |
